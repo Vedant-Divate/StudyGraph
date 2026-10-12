@@ -22,19 +22,23 @@ Same moment in IST: **00:15 IST, Thursday 15 October 2026**
 
 ## A-2 — Team vs individual requirement and registration status
 
-**RESOLVED (same source).** Rules tab: "Team size: one to four members, including
+**RESOLVED (same source + human 2026-10-12).** Rules tab: "Team size: one to four members, including
 solo participation", "Inter-college teams are permitted", "One team can submit in
 only one track, and an individual may only be a member of one submitting team".
 Overview: "Ages 14+ only", "Students only", "Companies/professional organizations
-excluded". Registration status of our team: **UNRESOLVED — human must confirm they
-registered / joined (solo or team) on Devpost.**
+excluded". Human: 4 people, each working a different track; this repo is Track D.
+⚠️ ELIGIBILITY WARNING: a single 4-person Devpost team may submit in only ONE track.
+Each person must register/submit as a solo (team of 1) or a separate per-track team,
+and every teammate must have a Devpost account with their real full name on the
+submission (per Submission Guidelines) or they get no certificate.
 
 ## A-3 — Required demo-video host and length
 
-**UNRESOLVED — need human to paste Rules tab text (or the problem-statement doc).**
-The overview says "Submisson Requirements will be shared with problem statements"
-and the problem statements live in a Google Drive doc we did not open. Default
-applied: public YouTube video, 3–10 minutes.
+**RESOLVED (Track D problem statement + Submission Guidelines, pasted by human
+2026-10-12).** "Demonstration Video: A 3-10 minute youtube video" showing the working
+system, upload workflow, grounded chat, assessment pipeline and architecture.
+"Unlisted is fine. Private is not." "English audio or English subtitles required."
+Matches the PROJECT.md default — default now confirmed, no change needed.
 
 ## A-4 — Rules on originality, build period and AI-assisted coding disclosure
 
@@ -49,10 +53,19 @@ AI-assisted development in README.
 
 ## Third-party / open datasets and course-material rules
 
-**UNRESOLVED — need human to paste Rules tab text.** Nothing about third-party or
-open-licensed material was found on the fetched pages. Default: demo uses only openly
-licensed material (MIT OCW CC BY-NC-SA 4.0 + OpenStax CC BY-NC-SA 4.0) with full
-attribution in data/demo-course/ATTRIBUTIONS.md.
+**RESOLVED (Track D Technical Considerations, pasted by human 2026-10-12).**
+"Teams may use any suitable course material (MIT OpenCourseWare, NPTEL, public
+textbooks, self-created content); no fixed dataset is required." Our MIT OCW 6.041SC
++ OpenStax choice (both CC BY-NC-SA 4.0, attributed) complies.
+
+## Track D requirements vs PROJECT.md (checked 2026-10-12, no spec change needed)
+
+The Track D statement's 6 requirement blocks (multimodal KB, source grounding,
+adaptive assessment, learner model, RAGAS/DeepEval/TruLens eval + simulated students,
+optional map/flashcards/schedule/Hindi/audio) and the 20/15/20/15/15/15 judging
+weights match PROJECT.md Sections 2.1, 8–11. Deliverables: working prototype, docs,
+eval results, 3–10 min YouTube video. Submission needs 4 parts: Devpost description,
+public GitHub repo + README with setup, video, team info.
 
 ## Organizer-provided resources
 
