@@ -13,7 +13,9 @@ dependency installs on linux/arm64 (Oracle VM).
 
 Phase 0 pins (lockfiles are the source of truth):
 
-- API runtime: `python:3.12-slim` base; `fastapi==0.121.1`, `uvicorn==0.38.0`,
+- API runtime: `python:3.12-slim` base (currently Debian **trixie** — the slim tag
+  floats; observed in the 2026-10-12 image build log); `fastapi==0.121.1`,
+  `uvicorn==0.38.0`,
   `pydantic==2.12.4`, `pydantic-settings==2.12.0`, `httpx==0.28.1`
   (see `services/api/uv.lock`).
 - API dev: `pytest==8.4.2`, `pytest-asyncio==1.2.0`, `ruff==0.14.5`, `mypy==1.18.2`.
