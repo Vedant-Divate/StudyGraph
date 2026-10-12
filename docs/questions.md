@@ -26,11 +26,11 @@ Same moment in IST: **00:15 IST, Thursday 15 October 2026**
 solo participation", "Inter-college teams are permitted", "One team can submit in
 only one track, and an individual may only be a member of one submitting team".
 Overview: "Ages 14+ only", "Students only", "Companies/professional organizations
-excluded". Human: 4 people, each working a different track; this repo is Track D.
-⚠️ ELIGIBILITY WARNING: a single 4-person Devpost team may submit in only ONE track.
-Each person must register/submit as a solo (team of 1) or a separate per-track team,
-and every teammate must have a Devpost account with their real full name on the
-submission (per Submission Guidelines) or they get no certificate.
+excluded". Human (2026-10-12): 4 people building one project per track; only the
+best-performing project is submitted, to its track — a single submission, which
+complies with "one team, one track". This repo (Track D) ships only if it wins the
+internal comparison. Everyone on the submission needs a Devpost account with their
+real full name on it, or no certificate.
 
 ## A-3 — Required demo-video host and length
 

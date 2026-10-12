@@ -35,5 +35,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Local spec files (kept out of the public submission repo by human request)
+PROJECT.md
+AGENTS.md
+
 # Verification artifacts (summaries only)
 eval/results/
