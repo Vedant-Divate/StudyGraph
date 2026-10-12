@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.uv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+apps/web/.env*.local
+
+# Env / secrets (never commit real keys)
+.env
+.env.local
+.env.*.local
+
+# Data / media (demo downloads are local-only, see scripts/fetch_demo_course.sh)
+data/demo-course/*
+!data/demo-course/.gitkeep
+!data/demo-course/ATTRIBUTIONS.md
+.cache/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Verification artifacts (summaries only)
+eval/results/
