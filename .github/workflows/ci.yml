@@ -57,3 +57,5 @@ jobs:
           pnpm build
       - name: No secrets check
         run: ./scripts/check_no_secrets.sh
+      - name: Build images (amd64)
+        run: docker compose build

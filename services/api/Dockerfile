@@ -16,6 +16,8 @@ WORKDIR /srv/api
 COPY pyproject.toml uv.lock ./
 RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev
 
+ENV VIRTUAL_ENV=/srv/api/.venv PATH=/srv/api/.venv/bin:$PATH
+
 COPY app ./app
 
 EXPOSE 8000

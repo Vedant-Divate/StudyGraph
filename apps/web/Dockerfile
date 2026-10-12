@@ -21,6 +21,6 @@ COPY --from=build /srv/web/package.json ./
 COPY --from=build /srv/web/node_modules ./node_modules
 COPY --from=build /srv/web/.next ./.next
 COPY --from=build /srv/web/public ./public
-COPY --from=build /srv/web/next.config.ts ./
+COPY --from=build /srv/web/next.config.mjs ./
 EXPOSE 3000
-CMD ["pnpm", "start"]
+CMD ["node", "/srv/web/node_modules/next/dist/bin/next", "start"]
