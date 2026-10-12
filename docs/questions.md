@@ -74,8 +74,13 @@ provisions the VM. Public URL: **pending**.
 
 ## A-7 — NIM models
 
-**UNRESOLVED — waiting on human.** Human will upload screenshots of available models,
-then share base URL + API key. ADR-0005 records placeholders. No live API calls made.
+**PARTIALLY RESOLVED 2026-10-12.** Base URL `https://integrate.api.nvidia.com/v1`
+(OpenAI-compatible) confirmed from the human's working snippet; one key serves all
+models and lives in `.env.local` (gitignored). Chat model confirmed:
+`nvidia/nemotron-3.5-lightning-30b-a3b`. Proposed (exact IDs unconfirmed — human to
+copy from each card's snippet): vision `meta/muse-glimmer-30b`, verifier
+`openai/gpt-oss-20b`, judge `z-ai/glm-5-3`, embeddings `nvidia/nemotron-3-embed-1b`.
+Rate limits unknown — start conservative. ADR-0005 updated. No live API calls made.
 
 ## A-9 — Hindi support
 
