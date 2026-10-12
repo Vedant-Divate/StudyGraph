@@ -1,6 +1,6 @@
-# ADR-0005: LLM provider is NVIDIA NIM (endpoint + chat locked, rest proposed)
+# ADR-0005: LLM provider is NVIDIA NIM (all models confirmed)
 
-- Status: accepted (endpoint/chat confirmed 2026-10-12; vision/verifier/judge/embed IDs await human confirmation)
+- Status: accepted
 - Date: 2026-10-12
 - Phase: 0
 
@@ -37,16 +37,18 @@ API calls.
 
 ## Chosen models
 
-Confirmed IDs come from the human's snippets; proposed IDs are NOT used until the
-human confirms the exact string.
+All IDs confirmed verbatim from the human's working snippets (2026-10-12).
 
-| Role | Model ID | Status | Vision? | Structured-output mode | Notes |
-|------|----------|--------|---------|------------------------|-------|
-| `LLM_MODEL` (chat) | `nvidia/nemotron-3.5-lightning-30b-a3b` | confirmed | no (text) | schema-prompt + validate + retry (tool calling exists; verify in Phase 1) | fast 30B A3B MoE, agentic |
-| `VISION_MODEL` | `meta/muse-glimmer-30b` (proposed) | **awaiting exact ID** | must be yes | TBD (native tool calling per card) | fallback: `meta/llama-3.2-11b-vision-instruct` (proposed) |
-| `VERIFIER_MODEL` | `openai/gpt-oss-20b` (proposed) | **awaiting exact ID** | n/a | schema-prompt + validate + retry | ≠ chat; math/reasoning, small/fast |
-| `JUDGE_MODEL` | `z-ai/glm-5-3` (proposed) | **awaiting exact ID** | n/a | schema-prompt + validate + retry | ≠ chat; 753B reasoner |
-| embeddings | `nvidia/nemotron-3-embed-1b` (proposed), `EMBED_BACKEND=nim` | **awaiting exact ID** | n/a | n/a | tests always `hash` |
+| Role | Model ID | Vision? | Structured-output mode | Notes |
+|------|----------|---------|------------------------|-------|
+| `LLM_MODEL` (chat) | `nvidia/nemotron-3.5-lightning-30b-a3b` | no (text) | schema-prompt + validate + retry (tool calling exists; verify in Phase 1) | fast 30B A3B MoE, agentic; reasoning via `enable_thinking` + budget |
+| `VISION_MODEL` | `meta/muse-glimmer-30b` | yes | schema-prompt + validate + retry (native tool calling per card; verify in Phase 1) | 30B multimodal reasoning; fallback if weak: `meta/llama-3.2-11b-vision-instruct` (unconfirmed) |
+| `VERIFIER_MODEL` | `openai/gpt-oss-20b` | n/a | schema-prompt + validate + retry | ≠ chat; math/reasoning, small/fast |
+| `JUDGE_MODEL` | `z-ai/glm-5.3` | n/a | schema-prompt + validate + retry | ≠ chat; note the dot (`glm-5.3`, not `glm-5-3`) |
+| embeddings | `nvidia/nemotron-3-embed-1b` via `EMBED_BACKEND=nim` | n/a | n/a | request shape: `{model, input, input_type: query\|passage, encoding_format: float, truncate: END}`; tests always `hash` |
+
+All chat models accept non-streaming `chat.completions.create` (observed working
+params: temperature 0.5–1, top_p 0.95–1).
 
 ## Consequences
 
