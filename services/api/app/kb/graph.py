@@ -57,8 +57,7 @@ def propose_edges(
 ) -> list[dict[str, Any]]:
     names = "\n".join(f"- {c['name']}: {c['summary'][:100]}" for c in concepts)
     sample_units = "\n".join(
-        f"[{uid}] {text[:120].replace(chr(10), ' ')}"
-        for uid, text in list(unit_index.items())[:40]
+        f"[{uid}] {text[:120].replace(chr(10), ' ')}" for uid, text in list(unit_index.items())[:40]
     )
     prompt = (
         "For this probability course, propose prerequisite edges A -> B (A must be "
