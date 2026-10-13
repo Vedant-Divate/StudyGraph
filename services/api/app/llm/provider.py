@@ -1,11 +1,7 @@
-"""LLM provider interface (Phase 0 stub).
+"""LLM provider interface (Phase 1 full contract).
 
-The full contract (`complete_structured`, `vision_describe`, optional `embed`,
-rate limiting, retries, caching) lands in Phase 1. This stub fixes the seam so
-`tutor/`, `assess/` and `eval/` can depend on it later.
-
-Implementations: `mock_provider.py` (tests/CI) and, from Phase 1,
-`nim_provider.py` (NVIDIA NIM; see ADR-0005).
+Implementations: `mock_provider.py` (tests/CI) and `nim_provider.py`
+(NVIDIA NIM; see ADR-0005). Callers never touch HTTP, keys, or image bytes.
 """
 
 from dataclasses import dataclass, field
@@ -24,16 +20,22 @@ class StructuredResult:
 
 
 class LLMProvider(Protocol):
-    """Minimal Phase 0 provider seam."""
-
     name: str
 
     def complete_structured(
         self, *, prompt: str, schema: dict[str, Any], model: str
     ) -> StructuredResult:
-        """Return JSON-validated output for *prompt* conforming to *schema*."""
-        ...  # pragma: no cover
+        """Return JSON output for *prompt* conforming to *schema* (validated)."""
+        ...
 
     def vision_describe(self, *, image_path: str, prompt: str, model: str) -> str:
         """Return a text description of the image at *image_path*."""
-        ...  # pragma: no cover
+        ...
+
+
+class EmbeddingProvider(Protocol):
+    name: str
+
+    def embed(self, *, texts: list[str], model: str) -> list[list[float]]:
+        """Return one vector per input text, in order."""
+        ...
