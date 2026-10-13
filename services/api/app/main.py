@@ -1,15 +1,17 @@
-"""FastAPI entrypoint. Phase 0: liveness + config presence only."""
+"""FastAPI entrypoint."""
 
 import logging
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from app.api.routers import library as library_router
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="StudyGraph API")
+app.include_router(library_router.router)
 
 
 @app.get("/api/health")

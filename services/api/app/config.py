@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: str = "development"
+    data_dir: str = "./data"
     database_url: str = "postgresql+psycopg://studygraph:studygraph@localhost:5432/studygraph"
 
     # LLM / VLM (NVIDIA NIM; see ADR-0005)
