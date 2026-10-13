@@ -39,7 +39,7 @@ jobs:
           uv run --frozen ruff format --check .
           uv run --frozen mypy app
           uv run --frozen pytest -q
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Enable corepack (reads pnpm version from packageManager)
