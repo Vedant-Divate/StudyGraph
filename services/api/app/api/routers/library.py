@@ -40,6 +40,18 @@ def _public_course(course: Any) -> dict[str, Any]:
     }
 
 
+@router.get("/api/courses")
+def list_courses(session: Session = Depends(get_session)) -> dict[str, Any]:
+    from sqlalchemy import select as sa_select
+
+    from app.db import models as db_models
+
+    rows = session.scalars(
+        sa_select(db_models.Course).order_by(db_models.Course.created_at.desc()).limit(50)
+    ).all()
+    return {"courses": [_public_course(c) for c in rows]}
+
+
 @router.post("/api/courses")
 def create_course(body: CourseCreate, session: Session = Depends(get_session)) -> dict[str, Any]:
     course = library.create_course(
@@ -47,6 +59,20 @@ def create_course(body: CourseCreate, session: Session = Depends(get_session)) -
     )
     session.commit()
     return _public_course(course)
+
+
+@router.get("/api/courses/{course_id}/sources")
+def list_sources(course_id: uuid.UUID, session: Session = Depends(get_session)) -> dict[str, Any]:
+    from sqlalchemy import select as sa_select
+
+    from app.db import models as db_models
+
+    if library.get_course(session, course_id) is None:
+        raise _not_found("course", course_id)
+    rows = session.scalars(
+        sa_select(db_models.Source).where(db_models.Source.course_id == course_id)
+    ).all()
+    return {"sources": [_public_source(s) for s in rows]}
 
 
 @router.get("/api/courses/{course_id}")

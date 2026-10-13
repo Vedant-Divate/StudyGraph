@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     vision_model: str = "meta/muse-glimmer-30b"
     verifier_model: str = "openai/gpt-oss-20b"
     judge_model: str = "z-ai/glm-5.3"
-    llm_rpm: int = 20
-    llm_concurrency: int = 2
+    llm_rpm: int = 60
+    llm_concurrency: int = 4
     llm_cache_dir: str = "./.cache/llm"
     llm_timeout_s: float = 25.0
 
