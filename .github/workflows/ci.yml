@@ -39,14 +39,11 @@ jobs:
           uv run --frozen ruff format --check .
           uv run --frozen mypy app
           uv run --frozen pytest -q
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - name: Enable corepack (reads pnpm version from packageManager)
+        run: corepack enable && pnpm --version
       - name: Verify web
         working-directory: apps/web
         run: |
