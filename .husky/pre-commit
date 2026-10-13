@@ -1,1 +1,1 @@
-cd services/api && uv run --frozen ruff check . && uv run --frozen ruff format --check .
+cd services/api && uv run --no-sync --frozen ruff check . && uv run --no-sync --frozen ruff format --check .

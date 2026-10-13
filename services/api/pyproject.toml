@@ -6,6 +6,7 @@ requires-python = "==3.12.*"
 dependencies = [
   "alembic>=1.20.0",
   "fastapi==0.121.1",
+  "faster-whisper>=1.2.1",
   "httpx==0.28.1",
   "openai>=3.29.0",
   "pgvector>=0.5.1",
@@ -40,6 +41,10 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.12"
 strict = true
 show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = "faster_whisper.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
