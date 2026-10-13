@@ -12,7 +12,8 @@ patterns=(
 
 fail=0
 for pattern in "${patterns[@]}"; do
-  if git grep -n -E "$pattern" -- . 2>/dev/null; then
+  # Exclude this script: it necessarily contains the patterns themselves.
+  if git grep -n -E "$pattern" -- . ':!scripts/check_no_secrets.sh' 2>/dev/null; then
     echo "check_no_secrets: matched pattern: $pattern"
     fail=1
   fi
