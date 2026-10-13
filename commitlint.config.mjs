@@ -13,6 +13,7 @@ export default {
         "assess",
         "learner",
         "llm",
+        "workers",
         "eval",
         "api",
         "web",

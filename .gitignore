@@ -27,6 +27,8 @@ apps/web/.env*.local
 data/demo-course/*
 !data/demo-course/.gitkeep
 !data/demo-course/ATTRIBUTIONS.md
+data/uploads/
+data/work/
 .cache/
 
 # OS / editors
