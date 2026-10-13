@@ -29,6 +29,8 @@ data/demo-course/*
 !data/demo-course/ATTRIBUTIONS.md
 data/uploads/
 data/work/
+services/api/data/uploads/
+services/api/data/work/
 .cache/
 
 # OS / editors
