@@ -6,13 +6,18 @@ from app.llm.factory import get_embedder
 from app.llm.mock_provider import hash_embed
 
 
-def embed_texts(texts: list[str], *, settings: Settings | None = None) -> list[list[float]]:
+def embed_texts(
+    texts: list[str],
+    *,
+    settings: Settings | None = None,
+    input_type: str = "passage",
+) -> list[list[float]]:
     settings = settings or get_settings()
     if not texts:
         return []
     if settings.embed_backend == "nim":
         provider = get_embedder(settings)
-        vectors = provider.embed(texts=texts, model=settings.embed_model)
+        vectors = provider.embed(texts=texts, model=settings.embed_model, input_type=input_type)
         if any(len(v) != EMBED_DIM for v in vectors):
             raise ValueError("embedding dimension mismatch")
         return vectors

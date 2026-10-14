@@ -32,7 +32,14 @@ class MockProvider:
     name = "mock"
 
     def complete_structured(
-        self, *, prompt: str, schema: dict[str, Any], model: str = MOCK_MODEL
+        self,
+        *,
+        prompt: str,
+        schema: dict[str, Any],
+        model: str = MOCK_MODEL,
+        timeout_s: float | None = None,
+        enable_thinking: bool | None = None,
+        system_prompt_prefix: str | None = None,
     ) -> StructuredResult:
         lowered = prompt.lower()
         if "refuse" in lowered or "off-material" in lowered:
@@ -62,5 +69,7 @@ class MockProvider:
     def vision_describe(self, *, image_path: str, prompt: str, model: str = MOCK_MODEL) -> str:
         return f"Mock figure description for {image_path}."
 
-    def embed(self, *, texts: list[str], model: str = MOCK_MODEL) -> list[list[float]]:
+    def embed(
+        self, *, texts: list[str], model: str = MOCK_MODEL, input_type: str = "passage"
+    ) -> list[list[float]]:
         return [hash_embed(text) for text in texts]

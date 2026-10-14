@@ -42,7 +42,10 @@ VERIFY_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "properties": {
                     "segment": {"type": "integer"},
-                    "supported": {"type": "string"},
+                    "supported": {
+                        "type": "string",
+                        "enum": ["supported", "partial", "no"],
+                    },
                     "reason": {"type": "string"},
                 },
                 "required": ["segment", "supported"],
@@ -56,11 +59,15 @@ VERIFY_SCHEMA: dict[str, Any] = {
 def _unit_context(units: list[dict[str, Any]]) -> str:
     parts = []
     for unit in units:
-        body = unit["text"]
-        if unit.get("figure_description"):
-            body += "\n[figure] " + unit["figure_description"]
-        parts.append(f"[{unit['unit_id']}] ({unit['kind']}) {body[:1200]}")
+        parts.append(f"[{unit['unit_id']}] ({unit['kind']}) {_unit_text(unit)}")
     return "\n\n".join(parts)
+
+
+def _unit_text(unit: dict[str, Any]) -> str:
+    body = str(unit["text"])
+    if unit.get("figure_description"):
+        body += "\n[figure] " + unit["figure_description"]
+    return body[:600]
 
 
 def generate_answer(
@@ -78,32 +85,43 @@ def generate_answer(
         from app.llm.factory import get_llm
 
         llm = get_llm(settings)
-    threshold = min_confidence if min_confidence is not None else 0.05
-    units, confidence = kb_retrieval.retrieve(
+    threshold = min_confidence if min_confidence is not None else settings.retrieval_min_confidence
+    units, confidence, mean_top_three_similarity = kb_retrieval.retrieve(
         session, course_id=course_id, query=question, settings=settings
     )
+    session.rollback()
     retrieved_ids = {str(u["unit_id"]) for u in units}
     if not units or confidence < threshold:
         return _not_covered(session, course_id, allow_outside, llm, settings, question)
 
     prompt = (
-        "Answer the student's question using ONLY the course units below. Output "
+        "Answer the student's question directly using ONLY the course units below. "
+        "Write one concise source_backed segment in your own words and cite all "
+        "supporting unit_ids; do not copy transcript excerpts. Use not_covered when "
+        "the units do not contain the answer; do not substitute related but "
+        "unresponsive passages or transfer a rule to an unmentioned domain. "
+        "Output "
         "segments with label source_backed (citing [unit_id]s you were given), "
         "outside_knowledge (no citations), or not_covered. NEVER write page, slide "
         "or timestamp numbers — cite unit_ids only.\n\nQuestion: "
         f"{question}\n\nUnits:\n{_unit_context(units)}"
     )
     result: StructuredResult = llm.complete_structured(
-        prompt=prompt, schema=ANSWER_SCHEMA, model=settings.llm_model
+        prompt=prompt,
+        schema=ANSWER_SCHEMA,
+        model=settings.llm_model,
+        timeout_s=settings.generation_timeout_s,
+        enable_thinking=settings.llm_enable_thinking,
     )
     segments = _enforce_ids(result.data.get("segments", []), retrieved_ids)
-    verdicts = _verify_batch(segments, units, llm=llm, settings=settings)
+    verdicts = _verify_batch(segments, units, question=question, llm=llm, settings=settings)
     final = _apply_verdicts(segments, verdicts)
     if not any(s["label"] == "source_backed" for s in final):
         return _not_covered(session, course_id, allow_outside, llm, settings, question)
     return {
         "segments": _resolve(session, final),
         "confidence": confidence,
+        "mean_top3_similarity": mean_top_three_similarity,
         "verifier": verdicts,
     }
 
@@ -126,6 +144,7 @@ def _verify_batch(
     segments: list[dict[str, Any]],
     units: list[dict[str, Any]],
     *,
+    question: str,
     llm: Any,
     settings: Settings,
 ) -> list[dict[str, Any]]:
@@ -136,23 +155,35 @@ def _verify_batch(
     lines = []
     for i, seg in backed:
         cited = "\n".join(
-            f"({uid}) {(by_id.get(uid, {}).get('text', ''))[:800]}" for uid in seg["unit_ids"]
+            f"({uid}) {_unit_text(by_id[uid])}" for uid in seg["unit_ids"] if uid in by_id
         )
         lines.append(f"SEGMENT {i}: {seg['text'][:600]}\nCITED:\n{cited}")
     prompt = (
-        "For each SEGMENT, judge whether its CITED units support it: supported, "
-        "partial or no, with a short reason. One batched call.\n\n" + "\n\n".join(lines)
+        "Question: "
+        + question
+        + "\nFor each SEGMENT, use exactly one status: supported, partial, or no. "
+        "First check whether the cited units directly support every factual claim. "
+        "If any claim is unsupported, return no, even if the answer sounds plausible. "
+        "Do not treat an analogy as support for a different named domain (for "
+        "example, a radar example does not support a disease-diagnosis claim). "
+        "Then check answer relevance: return supported only when the supported "
+        "claims directly answer the question; partial only when cited facts both "
+        "support and answer part of it; otherwise return no. A passage that is "
+        "accurately cited but does not answer the question is no. Explain both "
+        "checks briefly in the reason. One batched call.\n\n" + "\n\n".join(lines)
     )
     try:
         result: StructuredResult = llm.complete_structured(
-            prompt=prompt, schema=VERIFY_SCHEMA, model=settings.verifier_model
+            prompt=prompt,
+            schema=VERIFY_SCHEMA,
+            model=settings.verifier_model,
+            timeout_s=settings.verifier_timeout_s,
+            system_prompt_prefix="Reasoning: low.",
         )
         checks = result.data.get("checks", [])
-    except Exception as exc:  # noqa: BLE001 - fail open to 'partial'
+    except Exception as exc:  # noqa: BLE001 - external verifier failures are fail-closed
         logger.warning("verifier failed: %s", type(exc).__name__)
-        return [
-            {"segment": i, "supported": "partial", "reason": "verifier error"} for i, _ in backed
-        ]
+        return [{"segment": i, "supported": "no", "reason": "verifier error"} for i, _ in backed]
     verdicts = []
     for item in checks:
         if isinstance(item, dict) and item.get("segment") in [i for i, _ in backed]:
@@ -238,11 +269,16 @@ def _not_covered(
             f"one segment labelled outside_knowledge, no citations.\n\nQuestion: {question}"
         )
         result: StructuredResult = llm.complete_structured(
-            prompt=prompt, schema=ANSWER_SCHEMA, model=settings.llm_model
+            prompt=prompt,
+            schema=ANSWER_SCHEMA,
+            model=settings.llm_model,
+            timeout_s=settings.generation_timeout_s,
+            enable_thinking=settings.llm_enable_thinking,
         )
         segments = _enforce_ids(result.data.get("segments", []), set())
         return {"segments": _resolve(session, segments), "confidence": 0.0, "verifier": []}
     topics = _related_topics(session, course_id)
+    session.rollback()
     return {
         "segments": [
             {

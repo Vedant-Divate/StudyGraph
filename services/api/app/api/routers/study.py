@@ -32,6 +32,7 @@ def chat(
 
     if library.get_course(session, course_id) is None:
         raise HTTPException(status_code=404, detail="course not found")
+    session.rollback()
     return tutor.generate_answer(
         session,
         course_id=course_id,

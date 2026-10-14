@@ -127,19 +127,18 @@ def retrieve(
     course_id: UUID,
     query: str,
     settings: Settings | None = None,
-) -> tuple[list[dict[str, Any]], float]:
-    """Return (units with scores/locations, confidence). Units carry no locations to callers."""
+) -> tuple[list[dict[str, Any]], float, float]:
+    """Return units, the top raw cosine confidence, and the mean top-three cosine."""
     settings = settings or get_settings()
-    query_vector = embed_texts([query], settings=settings)[0]
+    query_vector = embed_texts([query], settings=settings, input_type="query")[0]
     vec = vector_ranked(session, course_id=course_id, query_vector=query_vector)
     key = keyword_ranked(session, course_id=course_id, query=query)
     fused = reciprocal_rank_fusion([vec, key])
-    top = fused[: settings.retrieval_top_k]
-    if not top:
-        return [], 0.0
-    best = top[0][1]
-    second = top[1][1] if len(top) > 1 else 0.0
-    confidence = max(0.0, min(1.0, best * (0.5 + 0.5 * min(1.0, (best - second) * 10))))
+    top = fused[: min(settings.retrieval_top_k, 6)]
+    if not top or not vec:
+        return [], -1.0, -1.0
+    confidence = vec[0][1]
+    mean_top_three = sum(score for _uid, score in vec[:3]) / min(len(vec), 3)
     by_id = {uid: score for uid, score in top}
     units = session.scalars(
         select(models.ContentUnit).where(models.ContentUnit.id.in_(list(by_id)))
@@ -157,4 +156,5 @@ def retrieve(
         for uid, score in top
         if uid in unit_map
     ]
-    return expand_neighbours(session, ordered), confidence
+    expanded = expand_neighbours(session, ordered)
+    return expanded[:6], confidence, mean_top_three

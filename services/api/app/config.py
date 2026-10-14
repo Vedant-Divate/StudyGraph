@@ -1,5 +1,6 @@
 """Application configuration. All secrets come from the environment; nothing is logged."""
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +23,9 @@ class Settings(BaseSettings):
     llm_concurrency: int = 4
     llm_cache_dir: str = "./.cache/llm"
     llm_timeout_s: float = 25.0
+    generation_timeout_s: float = Field(default=90.0, gt=0.0)
+    verifier_timeout_s: float = Field(default=60.0, gt=0.0)
+    llm_enable_thinking: bool = False
 
     # Ingestion
     asr_backend: str = "mock"
@@ -33,7 +37,8 @@ class Settings(BaseSettings):
     max_figures_per_source: int = 20
 
     # Grounding / learner / assessment constants
-    retrieval_top_k: int = 8
+    retrieval_top_k: int = Field(default=6, ge=1, le=6)
+    retrieval_min_confidence: float = Field(default=0.35, ge=-1.0, le=1.0)
     question_dup_threshold: float = 0.88
     bkt_p_learn: float = 0.15
     propagation_alpha0: float = 0.4

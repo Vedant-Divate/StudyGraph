@@ -23,7 +23,14 @@ class LLMProvider(Protocol):
     name: str
 
     def complete_structured(
-        self, *, prompt: str, schema: dict[str, Any], model: str
+        self,
+        *,
+        prompt: str,
+        schema: dict[str, Any],
+        model: str,
+        timeout_s: float | None = None,
+        enable_thinking: bool | None = None,
+        system_prompt_prefix: str | None = None,
     ) -> StructuredResult:
         """Return JSON output for *prompt* conforming to *schema* (validated)."""
         ...
@@ -36,6 +43,8 @@ class LLMProvider(Protocol):
 class EmbeddingProvider(Protocol):
     name: str
 
-    def embed(self, *, texts: list[str], model: str) -> list[list[float]]:
+    def embed(
+        self, *, texts: list[str], model: str, input_type: str = "passage"
+    ) -> list[list[float]]:
         """Return one vector per input text, in order."""
         ...

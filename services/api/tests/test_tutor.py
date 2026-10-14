@@ -3,6 +3,8 @@
 import uuid
 from typing import Any
 
+import pytest
+
 from app.db import models
 from app.tutor import answer as tutor
 
@@ -58,6 +60,7 @@ class FakeSession:
 
     def __init__(self, units: list[models.ContentUnit]) -> None:
         self._units = {u.id: u for u in units}
+        self.rollback_calls = 0
         self._sources = {
             SRC_PDF: models.Source(
                 id=SRC_PDF,
@@ -95,6 +98,9 @@ class FakeSession:
             return self._sources.get(ident)
         return None
 
+    def rollback(self) -> None:
+        self.rollback_calls += 1
+
     def query(self, *_args: Any) -> Any:
         class _Q:
             def filter(self, *_a: Any) -> "_Q":
@@ -117,7 +123,16 @@ class ScriptedLLM:
         self._verdicts = verdicts
         self.calls = 0
 
-    def complete_structured(self, *, prompt: str, schema: dict, model: str) -> Any:
+    def complete_structured(
+        self,
+        *,
+        prompt: str,
+        schema: dict,
+        model: str,
+        timeout_s: float | None = None,
+        enable_thinking: bool | None = None,
+        system_prompt_prefix: str | None = None,
+    ) -> Any:
         from app.llm.provider import StructuredResult
 
         self.calls += 1
@@ -190,6 +205,203 @@ def test_refusal_triggers_on_empty_retrieval() -> None:
     assert out["segments"][0]["label"] == "not_covered"
 
 
+def test_configured_retrieval_threshold_is_used() -> None:
+    llm = ScriptedLLM(
+        answer_segments=[
+            {
+                "text": "Bayes rule inverts conditional probabilities.",
+                "label": "source_backed",
+                "unit_ids": [str(PDF_ID)],
+            }
+        ],
+        verdicts=[{"segment": 0, "supported": "yes", "reason": "supported by the unit"}],
+    )
+    settings = _settings()
+    settings.retrieval_min_confidence = 0.0
+    out = tutor.generate_answer(
+        FakeSession([PDF_UNIT]),
+        course_id=uuid.uuid4(),
+        question="What is Bayes?",
+        allow_outside=False,
+        settings=settings,
+        llm=llm,
+    )
+    assert out["segments"][0]["label"] == "source_backed"
+
+
+def test_read_transaction_closes_before_model_calls() -> None:
+    session = FakeSession([PDF_UNIT])
+
+    class TransactionCheckingLLM(ScriptedLLM):
+        def complete_structured(
+            self,
+            *,
+            prompt: str,
+            schema: dict,
+            model: str,
+            timeout_s: float | None = None,
+            enable_thinking: bool | None = None,
+            system_prompt_prefix: str | None = None,
+        ) -> Any:
+            assert session.rollback_calls == 1
+            return super().complete_structured(
+                prompt=prompt,
+                schema=schema,
+                model=model,
+                timeout_s=timeout_s,
+                enable_thinking=enable_thinking,
+                system_prompt_prefix=system_prompt_prefix,
+            )
+
+    llm = TransactionCheckingLLM(
+        answer_segments=[
+            {
+                "text": "Bayes rule inverts conditional probabilities.",
+                "label": "source_backed",
+                "unit_ids": [str(PDF_ID)],
+            }
+        ],
+        verdicts=[{"segment": 0, "supported": "yes", "reason": "supported by the unit"}],
+    )
+    tutor.generate_answer(
+        session,
+        course_id=uuid.uuid4(),
+        question="What is Bayes?",
+        allow_outside=False,
+        settings=_settings(),
+        llm=llm,
+        min_confidence=-1.0,
+    )
+    assert session.rollback_calls == 1
+
+
+def test_chat_closes_course_lookup_before_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.api.routers import study
+    from app.db.repositories import library
+
+    session = FakeSession([])
+    monkeypatch.setattr(library, "get_course", lambda *_args: object())
+
+    def generate_answer(session_arg: Any, **_kwargs: Any) -> dict[str, Any]:
+        assert session_arg.rollback_calls == 1
+        return {"segments": []}
+
+    monkeypatch.setattr(study.tutor, "generate_answer", generate_answer)
+    result = study.chat(uuid.uuid4(), study.ChatRequest(message="Question"), session)
+    assert result == {"segments": []}
+
+
+def test_role_timeouts_and_prompt_unit_truncation() -> None:
+    settings = _settings()
+    session = FakeSession([PDF_UNIT])
+
+    class RoleCaptureLLM(ScriptedLLM):
+        def __init__(self) -> None:
+            super().__init__(
+                answer_segments=[
+                    {
+                        "text": "Bayes rule inverts conditional probabilities.",
+                        "label": "source_backed",
+                        "unit_ids": [str(PDF_ID)],
+                    }
+                ],
+                verdicts=[{"segment": 0, "supported": "yes", "reason": "supported"}],
+            )
+            self.options: list[tuple[float | None, bool | None]] = []
+            self.prompts: list[str] = []
+            self.system_prefixes: list[str | None] = []
+
+        def complete_structured(
+            self,
+            *,
+            prompt: str,
+            schema: dict,
+            model: str,
+            timeout_s: float | None = None,
+            enable_thinking: bool | None = None,
+            system_prompt_prefix: str | None = None,
+        ) -> Any:
+            self.options.append((timeout_s, enable_thinking))
+            self.prompts.append(prompt)
+            self.system_prefixes.append(system_prompt_prefix)
+            return super().complete_structured(
+                prompt=prompt,
+                schema=schema,
+                model=model,
+                timeout_s=timeout_s,
+                enable_thinking=enable_thinking,
+                system_prompt_prefix=system_prompt_prefix,
+            )
+
+    llm = RoleCaptureLLM()
+    tutor.generate_answer(
+        session,
+        course_id=uuid.uuid4(),
+        question="What is Bayes?",
+        allow_outside=False,
+        settings=settings,
+        llm=llm,
+        min_confidence=-1.0,
+    )
+    assert llm.options == [
+        (settings.generation_timeout_s, settings.llm_enable_thinking),
+        (settings.verifier_timeout_s, None),
+    ]
+    assert "Question: What is Bayes?" in llm.prompts[1]
+    assert "directly answer the question" in llm.prompts[1]
+    assert llm.system_prefixes[1] == "Reasoning: low."
+    assert len(tutor._unit_text({"text": "x" * 700})) == 600
+
+
+def test_verifier_failure_refuses_unverified_source_answer() -> None:
+    class VerifierTimeoutLLM(ScriptedLLM):
+        verifier_attempts = 0
+
+        def complete_structured(
+            self,
+            *,
+            prompt: str,
+            schema: dict,
+            model: str,
+            timeout_s: float | None = None,
+            enable_thinking: bool | None = None,
+            system_prompt_prefix: str | None = None,
+        ) -> Any:
+            self.verifier_attempts += 1
+            if self.verifier_attempts == 2:
+                raise TimeoutError("verifier timeout")
+            return super().complete_structured(
+                prompt=prompt,
+                schema=schema,
+                model=model,
+                timeout_s=timeout_s,
+                enable_thinking=enable_thinking,
+                system_prompt_prefix=system_prompt_prefix,
+            )
+
+    llm = VerifierTimeoutLLM(
+        answer_segments=[
+            {
+                "text": "Bayes rule inverts conditional probabilities.",
+                "label": "source_backed",
+                "unit_ids": [str(PDF_ID)],
+            }
+        ],
+        verdicts=[],
+    )
+    result = tutor.generate_answer(
+        FakeSession([PDF_UNIT]),
+        course_id=uuid.uuid4(),
+        question="What is Bayes?",
+        allow_outside=False,
+        settings=_settings(),
+        llm=llm,
+        min_confidence=-1.0,
+    )
+    assert llm.verifier_attempts == 2
+    assert result["segments"][0]["label"] == "not_covered"
+
+
 def test_citations_resolve_pdf_and_video() -> None:
     llm = ScriptedLLM(
         answer_segments=[
@@ -208,7 +420,7 @@ def test_citations_resolve_pdf_and_video() -> None:
         allow_outside=False,
         settings=_settings(),
         llm=llm,
-        min_confidence=0.0,
+        min_confidence=-1.0,
     )
     cites = [c for s in out["segments"] for c in s["citations"]]
     assert len(cites) == 2

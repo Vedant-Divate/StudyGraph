@@ -46,7 +46,9 @@ class NIMProvider:
         self._limiter = RateLimiter(rpm=settings.llm_rpm, concurrency=settings.llm_concurrency)
         self._cache_dir = settings.llm_cache_dir
 
-    def _call_with_backoff(self, label: str, func: Any, **kwargs: Any) -> Any:
+    def _call_with_backoff(
+        self, label: str, func: Any, *, max_retries: int = 2, **kwargs: Any
+    ) -> Any:
         self._limiter.acquire()
         try:
             attempts = 0
@@ -54,7 +56,7 @@ class NIMProvider:
                 try:
                     return func(**kwargs)
                 except APIStatusError as exc:
-                    if is_retryable_status(exc.status_code) and attempts < 2:
+                    if is_retryable_status(exc.status_code) and attempts < max_retries:
                         delay = backoff_delay(attempts)
                         logger.warning(
                             "%s: HTTP %s, retrying in %.1fs", label, exc.status_code, delay
@@ -64,7 +66,7 @@ class NIMProvider:
                         continue
                     raise
                 except _RETRYABLE as exc:
-                    if attempts < 2:
+                    if attempts < max_retries:
                         delay = backoff_delay(attempts)
                         logger.warning(
                             "%s: %s, retrying in %.1fs", label, type(exc).__name__, delay
@@ -77,9 +79,23 @@ class NIMProvider:
             self._limiter.release()
 
     def complete_structured(
-        self, *, prompt: str, schema: dict[str, Any], model: str
+        self,
+        *,
+        prompt: str,
+        schema: dict[str, Any],
+        model: str,
+        timeout_s: float | None = None,
+        enable_thinking: bool | None = None,
+        system_prompt_prefix: str | None = None,
     ) -> StructuredResult:
-        key = llm_cache.cache_key("structured", model, prompt, str(sorted(schema.items())))
+        key = llm_cache.cache_key(
+            "structured",
+            model,
+            str(enable_thinking),
+            system_prompt_prefix or "",
+            prompt,
+            str(sorted(schema.items())),
+        )
         cached = llm_cache.read_json(self._cache_dir, key)
         if cached is not None and isinstance(cached.get("data"), dict):
             data = cached["data"]
@@ -87,14 +103,29 @@ class NIMProvider:
             return StructuredResult(data=data, model=model, attempts=0, cached=True)
 
         system = schema_prompt(schema)
+        if system_prompt_prefix:
+            system = f"{system_prompt_prefix}\n\n{system}"
         attempts = 0
         last_error = ""
         current_user = prompt
+        deadline = time.monotonic() + timeout_s if timeout_s is not None else None
         while attempts < 2:
             attempts += 1
+            request_client = self._client
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("structured model call exceeded its role timeout")
+                request_client = self._client.with_options(timeout=remaining)
+            request_options: dict[str, Any] = {}
+            if enable_thinking is not None:
+                request_options["extra_body"] = {
+                    "chat_template_kwargs": {"enable_thinking": enable_thinking}
+                }
             response = self._call_with_backoff(
                 "complete_structured",
-                self._client.chat.completions.create,
+                request_client.chat.completions.create,
+                max_retries=0,
                 model=model,
                 messages=[
                     {"role": "system", "content": system},
@@ -103,6 +134,7 @@ class NIMProvider:
                 temperature=0,
                 top_p=1,
                 stream=False,
+                **request_options,
             )
             content = (response.choices[0].message.content or "").strip()
             try:
@@ -155,10 +187,14 @@ class NIMProvider:
         llm_cache.write_json(self._cache_dir, key, {"text": text_out})
         return text_out
 
-    def embed(self, *, texts: list[str], model: str) -> list[list[float]]:
+    def embed(
+        self, *, texts: list[str], model: str, input_type: str = "passage"
+    ) -> list[list[float]]:
         if not texts:
             return []
-        key = llm_cache.cache_key("embed", model, *texts)
+        if input_type not in {"query", "passage"}:
+            raise ValueError("embedding input_type must be query or passage")
+        key = llm_cache.cache_key("embed", model, input_type, *texts)
         cached = llm_cache.read_json(self._cache_dir, key)
         if cached is not None and isinstance(cached.get("vectors"), list):
             vectors = cached["vectors"]
@@ -169,7 +205,11 @@ class NIMProvider:
             self._client.embeddings.create,
             model=model,
             input=texts,
-            extra_body={"input_type": "passage", "encoding_format": "float", "truncate": "END"},
+            extra_body={
+                "input_type": input_type,
+                "encoding_format": "float",
+                "truncate": "END",
+            },
         )
         vectors_out = [list(item.embedding) for item in response.data]
         llm_cache.write_json(self._cache_dir, key, {"vectors": vectors_out})
