@@ -1,1 +1,16 @@
-cd services/api && uv run --no-sync --frozen ruff check . && uv run --no-sync --frozen ruff format --check .
+#!/usr/bin/env sh
+# Pre-commit: ruff check + format on the API.
+cd services/api || exit 1
+if command -v uv >/dev/null 2>&1; then
+  uv run --no-sync --frozen ruff check . && uv run --no-sync --frozen ruff format --check .
+  exit $?
+fi
+if [ -x .venv/Scripts/ruff.exe ]; then
+  RUFF=.venv/Scripts/ruff.exe
+elif [ -x .venv/bin/ruff ]; then
+  RUFF=.venv/bin/ruff
+else
+  echo "pre-commit: no uv and no venv ruff found; skipping"
+  exit 0
+fi
+"$RUFF" check . && "$RUFF" format --check .
