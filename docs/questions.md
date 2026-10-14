@@ -94,8 +94,19 @@ All IDs confirmed verbatim from the human's snippets: chat
 `openai/gpt-oss-20b`, judge `z-ai/glm-5.3` (dot, not dash), embeddings
 `nvidia/nemotron-3-embed-1b` (`input_type` query/passage, `float` encoding,
 `truncate: END`). Rate limits unknown — start conservative. ADR-0005 accepted.
-No live API calls made.
+No live API calls were made when this item was resolved. Separate candidate
+catalog/prompt probes are recorded in the ADR-0005 addendum.
 
 ## A-9 — Hindi support
 
 Out of scope for MVP per PROJECT.md (F-24 is P2). No question.
+
+## A-10 — Cached graph evidence and hierarchy
+
+**SPRINT ASSUMPTION (2026-10-13).** `graph_draft.json` contains ordered concept
+levels but no parent IDs, and its edges/misconceptions have no evidence-unit IDs.
+The cache loader assigns parents from the preceding topic/subtopic order, marks
+all imported edges weak, and stores imported misconceptions as `llm_suggested`
+with no evidence IDs. This preserves the cache without claiming unsupported
+evidence; revisit if the cache format has an authoritative parent/evidence map.
+See ADR-0007 for imported row counts and remaining cache limitations.
