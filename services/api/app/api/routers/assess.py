@@ -504,11 +504,11 @@ def finish_assessment(
     mastery_now = {
         str(r.concept_id): r.p_mastery for r in repo.list_mastery(session, assessment.student_id)
     }
-    weak = [
-        cid
-        for cid, entry in by_concept.items()
-        if entry["total"] and entry["correct"] / entry["total"] < 0.6
-    ]
+    weak = []
+    for cid, entry in by_concept.items():
+        if entry["total"] and entry["correct"] / entry["total"] < 0.6:
+            concept = session.get(models.Concept, uuid.UUID(cid))
+            weak.append(concept.name if concept else cid)
     assessment.status = "finished"
     import datetime as dt_module
 
