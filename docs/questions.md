@@ -101,6 +101,31 @@ catalog/prompt probes are recorded in the ADR-0005 addendum.
 
 Out of scope for MVP per PROJECT.md (F-24 is P2). No question.
 
+## A-11 — Ablation students per profile: 30, not 10
+
+**SPRINT DECISION (2026-10-14, PROJECT.md wins).** The sprint brief said 10
+students per profile; PROJECT.md 11.4 requires ≥ 30. Applied the documented
+default: 30 students × 5 profiles × 3 policies × 5 sessions × 10 questions,
+fixed seeds (master 20261014), bootstrap 95% CIs over students. No extra cost
+driver (LLM-free, deterministic).
+
+## A-12 — Label-accuracy subset: 10 answers, not ≥ 20
+
+**SPRINT DECISION (2026-10-14).** PROJECT.md 11.3 asks for ≥ 20 hand-checked
+answers; the sprint brief scoped 10. Followed the brief (10 answered in-scope
+items: rag-01..05, 07..11; verdicts in docs/verification/eval-results.md,
+accuracy 8/10). Expand to ≥ 20 before quoting externally.
+
+## A-13 — Judge model for the RAGAS-style metrics
+
+**SPRINT DECISION (2026-10-14, evidence-based).** ADR-0005 records
+JUDGE_MODEL=`meta/muse-glimmer-30b`, but the sprint brief orders the fastest
+non-generator model with measured latency. Measured: glimmer ~20–30 s/call
+with ~90% unparseable structured output in a 13-item pilot (discarded);
+`openai/gpt-oss-20b` (≠ generator) parses reliably at mean 16.5 s/call with a
+`Reasoning: low.` prefix. The eval run used gpt-oss-20b via script flag only;
+repo config is unchanged.
+
 ## A-10 — Cached graph evidence and hierarchy
 
 **SPRINT ASSUMPTION (2026-10-13).** `graph_draft.json` contains ordered concept
