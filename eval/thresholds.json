@@ -1,0 +1,18 @@
+{
+  "comment": "First honest baseline (PROJECT.md 11.5). Set from the retrieval-only local-corpus proxy run 2026-10-14, NOT from server measurements and NOT invented. CI fails on regressions of more than 5 percentage points vs these values. Test set is LLM-drafted and unreviewed; re-baseline after human review and after the first live-DB run.",
+  "testset_sha16": "a16b8cd2d2b41651",
+  "source_results": "eval/results/rag_eval_retrieval.json",
+  "retrieval": {
+    "k": 5,
+    "n": 22,
+    "excluded_no_gold": 8,
+    "recall_at_k": 0.24015151515151514,
+    "mrr": 0.21666666666666667
+  },
+  "retrieval_kwonly_diagnostic": {
+    "k": 5,
+    "recall_at_k": 0.40075757575757576,
+    "mrr": 0.587121212121212
+  },
+  "regression_margin_pp": 5.0
+}
