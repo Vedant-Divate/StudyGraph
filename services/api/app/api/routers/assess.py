@@ -317,6 +317,7 @@ def next_question(
     body = _public_question(question)
     body["item_id"] = str(item.id)
     body["selection_reason"] = pick["reason"]
+    body["course_id"] = str(assessment.course_id)
     return body
 
 
@@ -499,6 +500,7 @@ def finish_assessment(
     return {
         "score": correct,
         "total": len(items),
+        "course_id": str(assessment.course_id),
         "by_concept": by_concept,
         "weak_concepts": weak,
         "likely_misconceptions": likely,

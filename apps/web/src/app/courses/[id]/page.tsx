@@ -34,6 +34,9 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
           <li>
             <Link href={`/courses/${id}/map`}>Knowledge map</Link>
           </li>
+          <li>
+            <StartQuiz courseId={id} />
+          </li>
         </ul>
       </nav>
       <h2>Sources</h2>
@@ -48,8 +51,42 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
   );
 }
 
-function SourceList({ courseId }: { courseId: string }) {
-  const [sources, setSources] = useState<Source[]>([]);
+function StartQuiz({ courseId }: { courseId: string }) {
+  const [busy, setBusy] = useState(false);
+
+  async function start() {
+    setBusy(true);
+    try {
+      const student = await api<{ id: string }>("/api/students", {
+        method: "POST",
+        body: JSON.stringify({ course_id: courseId }),
+      });
+      const assessment = await api<{ id: string }>(
+        `/api/courses/${courseId}/assessments`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            student_id: student.id,
+            mode: "adaptive",
+            scope: { all: true },
+            n: 8,
+          }),
+        },
+      );
+      window.location.href = `/quiz/${assessment.id}?student=${student.id}`;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button onClick={() => void start()} disabled={busy}>
+      Start adaptive quiz (8 questions)
+    </button>
+  );
+}
+
+function SourceList({ courseId }: { courseId: string }) {  const [sources, setSources] = useState<Source[]>([]);
 
   useEffect(() => {
     api<{ sources: Source[] }>(`/api/courses/${courseId}/sources`)
