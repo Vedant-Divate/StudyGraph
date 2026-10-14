@@ -263,17 +263,27 @@ def next_question(
     if items:
         last_q = session.get(models.Question, items[-1].question_id)
         last_concept = last_q.concept_id if last_q else None
+    asked_concepts: set[Any] = set()
+    for existing in items:
+        existing_q = session.get(models.Question, existing.question_id)
+        if existing_q and existing_q.concept_id:
+            asked_concepts.add(existing_q.concept_id)
+    attempts: list[dict[str, Any]] = []
     if order is not None:
-        chosen_concepts = [c for c in order if c["id"] not in {i.question_id for i in items}]
-        target = chosen_concepts[0] if chosen_concepts else order[0]
-        pick: dict[str, Any] = {
-            "concept": target,
-            "reason": f"Opening: {target['name']} (importance {target['importance']:.2f}).",
-            "difficulty": "medium",
-            "prereq_first": False,
-        }
+        ordered_targets = [c for c in order if c["id"] not in asked_concepts] or order
+        for target in ordered_targets:
+            attempts.append(
+                {
+                    "concept": target,
+                    "reason": (
+                        f"Opening: {target['name']} (importance {target['importance']:.2f})."
+                    ),
+                    "difficulty": "medium",
+                    "prereq_first": False,
+                }
+            )
     else:
-        pick = policy.choose(
+        first = policy.choose(
             info,
             _prereq_map(edges),
             m_effs,
@@ -282,17 +292,25 @@ def next_question(
             exploration_rate=settings.exploration_rate,
             rng=random.Random(),
         )
-    concept = pick["concept"]
-    question = _pick_bank_question(
-        session,
-        course_id=assessment.course_id,
-        concept_id=concept["id"],
-        difficulty=pick["difficulty"],
-        exclude_ids=seen,
-        threshold=settings.question_dup_threshold,
-    )
-    if question is None:
-        for diff in ("medium", "easy", "hard"):
+        attempts.append(first)
+        rest = sorted(
+            [c for c in info if c["id"] != first["concept"]["id"]],
+            key=lambda c: -c["importance"],
+        )
+        for concept in rest:
+            attempts.append(
+                {
+                    "concept": concept,
+                    "reason": f"Fallback: {concept['name']} (bank exhausted upstream).",
+                    "difficulty": policy.difficulty_for(m_effs.get(concept["id"], 0.3)),
+                    "prereq_first": False,
+                }
+            )
+    question = None
+    pick = attempts[0]
+    for attempt in attempts:
+        concept = attempt["concept"]
+        for diff in (attempt["difficulty"], "medium", "easy", "hard"):
             question = _pick_bank_question(
                 session,
                 course_id=assessment.course_id,
@@ -303,8 +321,12 @@ def next_question(
             )
             if question is not None:
                 break
+        if question is not None:
+            pick = attempt
+            break
     if question is None:
         raise HTTPException(status_code=404, detail="no unseen questions for this scope")
+    concept = pick["concept"]
     item = repo.add_item(
         session,
         assessment_id=assessment.id,
