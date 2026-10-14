@@ -25,6 +25,11 @@ jobs:
       LLM_PROVIDER: mock
       ASR_BACKEND: mock
       EMBED_BACKEND: hash
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: studygraph
+      PGPASSWORD: changeme
+      PGDATABASE: studygraph
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session
@@ -22,19 +22,26 @@ SYNC_URL = os.environ.get(
     "postgresql+psycopg://studygraph:studygraph@127.0.0.1:15432/studygraph",
 )
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "three_page.pdf")
+_test_engine: Engine | None = None
 
 
 def _override_session() -> Session:
-    engine = create_engine(SYNC_URL)
-    with Session(engine) as sess:
+    if _test_engine is None:
+        raise RuntimeError("local PostgreSQL fixture was not initialized")
+    with Session(_test_engine) as sess:
         yield sess
 
 
 @pytest.fixture(autouse=True)
-def _clean_db(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+def _clean_db(
+    local_postgres_engine: Engine,
+    tmp_path_factory: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    global _test_engine
+    _test_engine = local_postgres_engine
     monkeypatch.setenv("DATA_DIR", str(tmp_path_factory.mktemp("data")))
-    engine = create_engine(SYNC_URL)
-    with Session(engine) as sess:
+    with Session(local_postgres_engine) as sess:
         for table in ("content_units", "sources", "courses", "jobs"):
             sess.execute(text(f"DELETE FROM {table}"))
         sess.commit()
@@ -58,7 +65,7 @@ def test_upload_creates_source_and_job() -> None:
     assert job["status"] == "queued"
 
 
-def test_worker_ingests_uploaded_pdf() -> None:
+def test_worker_ingests_uploaded_pdf(local_postgres_engine: Engine) -> None:
     settings = get_settings()
     assert settings.llm_provider == "mock" and settings.embed_backend == "hash"
     course = client.post("/api/courses", json={"title": "T2"}).json()
@@ -67,8 +74,7 @@ def test_worker_ingests_uploaded_pdf() -> None:
             f"/api/courses/{course['id']}/sources",
             files={"file": ("three_page.pdf", handle, "application/pdf")},
         ).json()
-    engine = create_engine(SYNC_URL)
-    with Session(engine) as session:
+    with Session(local_postgres_engine) as session:
         assert runner.process_one_job(session, settings) is True
         assert runner.process_one_job(session, settings) is False
         source = library.get_source(session, uuid.UUID(body["id"]))

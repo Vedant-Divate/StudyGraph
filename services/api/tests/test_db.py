@@ -9,7 +9,7 @@ import os
 import uuid
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from app.db import models
@@ -22,9 +22,8 @@ SYNC_URL = os.environ.get(
 
 
 @pytest.fixture()
-def session() -> Session:
-    engine = create_engine(SYNC_URL)
-    with Session(engine) as sess:
+def session(local_postgres_engine: Engine) -> Session:
+    with Session(local_postgres_engine) as sess:
         # Isolate per test: wipe library tables.
         for table in ("content_units", "sources", "courses", "jobs"):
             sess.execute(text(f"DELETE FROM {table}"))
