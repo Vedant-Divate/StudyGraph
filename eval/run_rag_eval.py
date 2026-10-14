@@ -10,6 +10,12 @@ Modes:
   ``app.kb.retrieval``; Postgres full-text and neighbour expansion are NOT
   replicated — see caveats), and scores recall@k / MRR on gold locations.
   Needs no LLM, no API server, no DB.
+- ``--db-retrieval``: REAL retrieval baseline. Runs the server's own
+  ``app.kb.retrieval.retrieve`` (vector cosine over stored DB embeddings +
+  Postgres full-text + RRF + neighbour expansion) against Neon with
+  ``EMBED_BACKEND=nim`` for query embeddings. Retrieval only, no chat LLM.
+  Reads ``DATABASE_URL``/``NIM_API_KEY`` from ``.env.local`` (never printed).
+  DB access is SELECT-only; sessions are rolled back, never committed.
 - full (default): POSTs each test-set question to the real chat route
   ``POST /api/courses/{course_id}/chat`` with a per-request timeout, derives
   ``predicted_refused`` (all segments ``not_covered``) and citations, and
@@ -203,6 +209,89 @@ def chat_to_record(item: dict[str, Any], result: dict[str, Any]) -> dict[str, An
     return record
 
 
+def load_dotlocal_env() -> None:
+    """Load DATABASE_URL/NIM_API_KEY from repo .env.local into env (never logged)."""
+    dotlocal = REPO / ".env.local"
+    if not dotlocal.is_file():
+        return
+    for line in dotlocal.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        if key in ("DATABASE_URL", "NIM_API_KEY") and key not in os.environ:
+            os.environ[key] = value
+
+
+def db_retrieve_all(
+    items: list[dict[str, Any]], course_id: str, timeout_note: str = ""
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Run server retrieval per item against Neon (SELECT-only). Returns records + info."""
+    import uuid
+
+    from app.config import get_settings
+    from app.db import models
+    from app.db.session import make_session_factory
+    from app.kb import retrieval as kb_retrieval
+
+    settings = get_settings()
+    settings.embed_backend = "nim"
+    settings.llm_provider = "mock"  # retrieval only; no chat LLM in this mode
+    _ = timeout_note
+    factory = make_session_factory()
+    probe = factory()
+    try:
+        course = probe.get(models.Course, uuid.UUID(course_id))
+        assert course is not None, f"course {course_id} not found in DB"
+    finally:
+        probe.rollback()
+        probe.close()
+    records: list[dict[str, Any]] = []
+    for item in items:
+        session = factory()
+        started = time.time()
+        try:
+            units, confidence, mean_top3 = kb_retrieval.retrieve(
+                session, course_id=uuid.UUID(course_id), query=item["question"], settings=settings
+            )
+            records.append(
+                {
+                    "id": item["id"],
+                    "type": item["type"],
+                    "question": item["question"],
+                    "must_refuse": item["must_refuse"],
+                    "gold_locations": item["gold_locations"],
+                    "retrieved": [str(u["unit_id"]) for u in units],
+                    "confidence": confidence,
+                    "mean_top3_similarity": mean_top3,
+                    "latency_s": round(time.time() - started, 3),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - record per-item failures honestly
+            records.append(
+                {
+                    "id": item["id"],
+                    "type": item["type"],
+                    "question": item["question"],
+                    "must_refuse": item["must_refuse"],
+                    "gold_locations": item["gold_locations"],
+                    "retrieved": [],
+                    "error": type(exc).__name__,
+                    "latency_s": round(time.time() - started, 3),
+                }
+            )
+        finally:
+            session.rollback()
+            session.close()
+    info = {
+        "course_id": course_id,
+        "embed_backend": "nim",
+        "retrieval": "server app.kb.retrieval.retrieve (vector + ts_rank + RRF + neighbours)",
+        "db_access": "SELECT-only; sessions rolled back, never committed",
+    }
+    return records, info
+
+
 def load_testset(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     header, items = rows[0], rows[1:]
@@ -213,23 +302,45 @@ def load_testset(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the RAG eval (custom metrics).")
     parser.add_argument("--retrieval-only", action="store_true")
+    parser.add_argument("--db-retrieval", action="store_true")
     parser.add_argument("--testset", default=str(REPO / "eval" / "testset" / "rag.jsonl"))
     parser.add_argument("--out", default=str(REPO / "eval" / "results" / "rag_eval.json"))
     parser.add_argument("--base-url", default=os.environ.get("API_BASE_URL", "http://localhost:8000"))
     parser.add_argument("--course-id", default=os.environ.get("EVAL_COURSE_ID", ""))
     parser.add_argument("--timeout-s", type=float, default=150.0)
     parser.add_argument("--k", type=int, default=5)
+    parser.add_argument("--offset", type=int, default=0)
+    parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
 
     header, items = load_testset(Path(args.testset))
+    if args.limit:
+        items = items[args.offset : args.offset + args.limit]
+    elif args.offset:
+        items = items[args.offset :]
     digest = hashlib.sha256(Path(args.testset).read_bytes()).hexdigest()[:16]
 
-    corpus = load_corpus()
+    db_info: dict[str, Any] = {}
+    records: list[dict[str, Any]] = []
+    mode = ""
+    if args.db_retrieval:
+        import uuid as uuid_mod
+
+        load_dotlocal_env()
+        default_course = str(
+            uuid_mod.uuid5(uuid_mod.UUID(NAMESPACE), "mit-ocw-6.041sc-fall-2013")
+        )
+        records, db_info = db_retrieve_all(items, args.course_id or default_course)
+        mode = "db-retrieval"
+        corpus = []
+    else:
+        corpus = load_corpus()
     vectors = [hash_embed(u["text"]) for u in corpus]
     doc_freq = document_frequencies(corpus)
 
-    records: list[dict[str, Any]] = []
-    if args.retrieval_only:
+    if mode == "db-retrieval":
+        pass
+    elif args.retrieval_only:
         for item in items:
             ranked = local_retrieve(item["question"], corpus, vectors, doc_freq=doc_freq)
             kwonly = keyword_retrieve(item["question"], corpus, doc_freq)
@@ -260,18 +371,26 @@ def main() -> None:
             records.append(record)
         mode = "full"
 
-    kwonly_records = [
-        {**r, "retrieved": r.get("retrieved_kwonly", r.get("retrieved", []))} for r in records
-    ]
-    summary: dict[str, Any] = {
-        "retrieval": metrics.aggregate_retrieval(records, k=args.k),
-        "retrieval_kwonly_diagnostic": metrics.aggregate_retrieval(kwonly_records, k=args.k),
-        "retrieval_note": (
-            "Local-corpus proxy: 190 units rebuilt read-only from SRT/thumb artifacts, "
-            "hash embeddings, RRF(cosine, token-overlap). Server Postgres full-text "
-            "and neighbour expansion NOT replicated."
-        ),
-    }
+    if mode == "db-retrieval":
+        db_info["summary"] = metrics.aggregate_retrieval(records, k=args.k)
+        summary = {
+            "retrieval": db_info.pop("summary"),
+            "retrieval_backend": db_info,
+        }
+    else:
+        kwonly_records = [
+            {**r, "retrieved": r.get("retrieved_kwonly", r.get("retrieved", []))}
+            for r in records
+        ]
+        summary = {
+            "retrieval": metrics.aggregate_retrieval(records, k=args.k),
+            "retrieval_kwonly_diagnostic": metrics.aggregate_retrieval(kwonly_records, k=args.k),
+            "retrieval_note": (
+                "Local-corpus proxy: 190 units rebuilt read-only from SRT/thumb "
+                "artifacts, hash embeddings, RRF(cosine, token-overlap). Server "
+                "Postgres full-text and neighbour expansion NOT replicated."
+            ),
+        }
     if mode == "full":
         summary["citation"] = metrics.citation_accuracy(records)
         summary["refusal"] = metrics.refusal_metrics(records)
@@ -288,10 +407,18 @@ def main() -> None:
             "llm_model": os.environ.get("LLM_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b"),
             "verifier_model": os.environ.get("VERIFIER_MODEL", "openai/gpt-oss-20b"),
             "judge_model": os.environ.get("JUDGE_MODEL", "meta/muse-glimmer-30b"),
-            "embed_backend": os.environ.get("EMBED_BACKEND", "hash"),
+            "embed_backend": "nim" if mode == "db-retrieval" else os.environ.get("EMBED_BACKEND", "hash"),
+            "embed_model": os.environ.get("EMBED_MODEL", "nvidia/nemotron-3-embed-1b"),
         },
-        "model_ids_caveat": "Client-environment values, not server-proven; no key read or printed.",
-        "corpus": {"n_units": len(corpus), "source": "read-only SRT/thumb artifacts"},
+        "model_ids_caveat": (
+            "Client-environment values, not server-proven. "
+            "NIM key used from the environment for API calls; never printed or stored."
+        ),
+        "corpus": (
+            {"n_units": 190, "source": "Neon PostgreSQL (SELECT-only read of stored rows)"}
+            if mode == "db-retrieval"
+            else {"n_units": len(corpus), "source": "read-only SRT/thumb artifacts"}
+        ),
         "summary": summary,
         "records": records,
     }
