@@ -1,18 +1,21 @@
 {
-  "comment": "First honest baseline (PROJECT.md 11.5). Set from the retrieval-only local-corpus proxy run 2026-10-14, NOT from server measurements and NOT invented. CI fails on regressions of more than 5 percentage points vs these values. Test set is LLM-drafted and unreviewed; re-baseline after human review and after the first live-DB run.",
+  "comment": "Real baseline (PROJECT.md 11.5): server app.kb.retrieval.retrieve run read-only against Neon with NIM query embeddings, 2026-10-14. Supersedes the hash-embedding local proxy (kept below, labelled non-representative). CI fails on regressions of more than 5 percentage points vs retrieval. Test set is LLM-drafted and unreviewed; re-baseline after human review. Note: vector_ranked has no ORDER BY, so reruns may vary slightly on near-tied scores.",
   "testset_sha16": "a16b8cd2d2b41651",
-  "source_results": "eval/results/rag_eval_retrieval.json",
+  "source_results": "eval/results/rag_eval_db.json",
   "retrieval": {
     "k": 5,
     "n": 22,
     "excluded_no_gold": 8,
+    "recall_at_k": 0.6053030303030303,
+    "mrr": 0.7916666666666667,
+    "backend": "neon-postgres + nim-embeddings (nvidia/nemotron-3-embed-1b)",
+    "course_id": "cabcd146-86e6-5742-b51b-ad3ffd61ae27"
+  },
+  "retrieval_hash_proxy_superseded": {
+    "comment": "Non-representative: deterministic hash vectors carry no semantics; kept for history only.",
+    "k": 5,
     "recall_at_k": 0.24015151515151514,
     "mrr": 0.21666666666666667
-  },
-  "retrieval_kwonly_diagnostic": {
-    "k": 5,
-    "recall_at_k": 0.40075757575757576,
-    "mrr": 0.587121212121212
   },
   "regression_margin_pp": 5.0
 }
