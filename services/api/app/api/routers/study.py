@@ -44,15 +44,37 @@ def chat(
 @router.get("/api/courses/{course_id}/graph")
 def get_graph(
     course_id: uuid.UUID,
-    student_id: uuid.UUID | None = None,  # noqa: ARG001 - mastery colors land in Phase 7
+    student_id: uuid.UUID | None = None,
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
+    import datetime as dt_module
+
+    from app.db.repositories import assess as assess_repo
+    from app.domain import bkt as bkt_mod
+
     concepts = session.scalars(
         select(models.Concept).where(models.Concept.course_id == course_id)
     ).all()
     edges = session.scalars(
         select(models.ConceptEdge).where(models.ConceptEdge.course_id == course_id)
     ).all()
+    colors: dict[Any, dict[str, Any]] = {}
+    if student_id is not None:
+        now = dt_module.datetime.now(dt_module.UTC)
+        for concept in concepts:
+            row = assess_repo.ensure_mastery(session, student_id=student_id, concept_id=concept.id)
+            days = max(0.0, (now - row.last_seen_at).total_seconds() / 86400.0)
+            meff = bkt_mod.effective_mastery(
+                row.p_mastery, days_since_seen=days, stability_days=row.stability_days
+            )
+            band = bkt_mod.mastery_band(meff)
+            colors[concept.id] = {
+                "m_eff": meff,
+                "band": band,
+                "color": {"weak": "red", "developing": "amber", "strong": "green"}[band],
+                "icon": {"weak": "!", "developing": "~", "strong": "✓"}[band],
+            }
+    session.commit()
     return {
         "concepts": [
             {
@@ -62,6 +84,7 @@ def get_graph(
                 "summary": c.summary,
                 "parent_id": str(c.parent_id) if c.parent_id else None,
                 "importance": c.importance,
+                **colors.get(c.id, {}),
             }
             for c in concepts
         ],
