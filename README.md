@@ -137,6 +137,9 @@ Full numbers, seeds and caveats: `docs/verification/eval-results.md` (test set
   bank holds 36 verified MCQs and is thin per concept.
 - No public deployment — runs locally (or the same compose stack on a VM).
 - Full RAGAS-library evaluation was not run (custom RAGAS-style judge instead).
+- CI is red on `main` (Verify API step; local gate is green end-to-end and the
+  failure is under investigation without log access — suspected DB wiring in
+  the workflow, partially addressed).
 
 ## Demo course attributions and licences
 
