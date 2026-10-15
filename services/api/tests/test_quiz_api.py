@@ -25,7 +25,19 @@ def _override():
         yield sess
 
 
-app.dependency_overrides[get_session] = _override
+@pytest.fixture(autouse=True)
+def _quiz_override():
+    """Scope the Neon override to this module's tests only (never leak)."""
+    if not NEON_URL:
+        yield
+        return
+    app.dependency_overrides[get_session] = _override
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+
 client = TestClient(app)
 
 

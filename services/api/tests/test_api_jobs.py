@@ -33,6 +33,16 @@ def _override_session() -> Session:
 
 
 @pytest.fixture(autouse=True)
+def _api_override():
+    """Scope the dependency override to this module's tests only."""
+    app.dependency_overrides[get_session] = _override_session
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+
+@pytest.fixture(autouse=True)
 def _clean_db(
     local_postgres_engine: Engine,
     tmp_path_factory: pytest.TempPathFactory,
@@ -47,7 +57,6 @@ def _clean_db(
         sess.commit()
 
 
-app.dependency_overrides[get_session] = _override_session
 client = TestClient(app)
 
 
