@@ -12,7 +12,7 @@ jobs:
         image: pgvector/pgvector:0.8.7-pg17
         env:
           POSTGRES_USER: studygraph
-          POSTGRES_PASSWORD: changeme
+          POSTGRES_PASSWORD: studygraph
           POSTGRES_DB: studygraph
         ports:
           - 5432:5432
@@ -25,10 +25,11 @@ jobs:
       LLM_PROVIDER: mock
       ASR_BACKEND: mock
       EMBED_BACKEND: hash
+      DATABASE_URL_SYNC: postgresql+psycopg://studygraph:studygraph@127.0.0.1:5432/studygraph
       PGHOST: 127.0.0.1
       PGPORT: 5432
       PGUSER: studygraph
-      PGPASSWORD: changeme
+      PGPASSWORD: studygraph
       PGDATABASE: studygraph
     steps:
       - uses: actions/checkout@v5
@@ -43,6 +44,7 @@ jobs:
           uv run --frozen ruff check .
           uv run --frozen ruff format --check .
           uv run --frozen mypy app
+          uv run --frozen alembic upgrade head
           uv run --frozen pytest -q
       - uses: actions/setup-node@v4
         with:

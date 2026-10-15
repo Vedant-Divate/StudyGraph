@@ -2,9 +2,11 @@
 
 A source-grounded, misconception-aware AI study companion. Upload lecture videos,
 textbooks and slides; it builds a cited concept graph from them, answers questions
-only from that material (flagging or refusing everything else), generates verified
+from that material (flagging or refusing what it recognises as outside it —
+near-miss queries are a known weakness, recall 0.2), generates verified
 misconception-tagged quizzes, and keeps a per-concept learner model that decides
-what to teach and ask next — with measured evidence that the personalization works.
+what to teach and ask next — with honestly reported measurements, including the
+cases where adaptivity did not win (see Evaluation).
 
 Built for Track D (Personalized Tutoring & Adaptive Learning) of the Multimodal AI
 Hackathon 2026.
@@ -22,8 +24,8 @@ what the student already understands. Existing "chat with your PDF" tools stop a
 text retrieval: they ignore video and diagrams, do not model prerequisites,
 generate unverified quiz questions and do not measure whether they help.
 StudyGraph is for undergraduates studying for exams, self-learners using open
-courses, and instructors/evaluators who need evidence that answers are grounded,
-questions are correct, and personalization measurably improves outcomes.
+courses, and instructors/evaluators who need honest evidence about grounding,
+question quality, and whether personalization actually helps.
 
 ## How it works
 
@@ -33,7 +35,7 @@ Browser (Next.js: library, chat, quiz, knowledge map, eval page)
 FastAPI ─┬─ ingestion (PDF pages, video transcripts+frames, figure descriptions)
          ├─ kb (embeddings, hybrid retrieval, concept graph, tagging)
          ├─ tutor (grounded generation → verifier → labelled, cited answer)
-         ├─ assess (verified MCQ/numericals, grading, misconception reports)
+         ├─ assess (verified MCQs, grading, misconception reports)
          ├─ learner (BKT + propagation + forgetting, adaptive selection)
          └─ llm (NVIDIA NIM provider, mock for tests)
 PostgreSQL + pgvector (units, concepts, questions, mastery, jobs)
@@ -77,16 +79,33 @@ verifier `openai/gpt-oss-20b`, judge `openai/gpt-oss-20b` (eval), embeddings
 
 ```bash
 cp .env.example .env            # then put NIM_API_KEY (+ Neon DATABASE_URL) in .env.local
-docker compose up -d db         # or point DATABASE_URL at Neon
-cd services/api && alembic upgrade head
+docker compose up -d db         # needs Docker Desktop running; or point DATABASE_URL at Neon
+cd services/api
+# local compose DB listens on 127.0.0.1:15432 (5432 is often blocked on Windows):
+DATABASE_URL_SYNC=postgresql+psycopg://studygraph:studygraph@127.0.0.1:15432/studygraph alembic upgrade head
 bash scripts/fetch_demo_course.sh        # downloads OCW slides/video + textbook (not committed)
-python scripts/store_cached_artifacts.py # loads the cached course into Postgres
-uvicorn app.main:app                     # API on :8000 (services/api)
+cd services/api && uv run --frozen python ../../scripts/store_cached_artifacts.py  # needs DATABASE_URL
+uv run --frozen uvicorn app.main:app      # API on :8000 (services/api)
 cd apps/web && pnpm install && pnpm dev  # web on :3000
 ```
 
 `make verify` runs the full gate (ruff, mypy, pytest on mocks, typecheck, lint,
-tests, web build, secret scan). CI runs it per commit.
+tests, web build, secret scan). CI runs it per commit. (`make` needs Git Bash /
+WSL / Linux; on plain Windows run the same commands directly.)
+
+### What works without keys vs with keys
+
+Without any API key or database: the full test suite (mock LLM/ASR/embeddings),
+`GET /api/health`, and the web landing page. Live chat, quizzes, ingestion and
+the map need a NIM key (`.env.local`) and a Postgres+pgvector database (Neon URL
+or local `docker compose`).
+
+### A note on the demo data
+
+The cached course artifacts (concept-graph JSON, frame descriptions, the 36-Q
+question bank) live in the database and gitignored local files — they are NOT
+committed. A clean clone starts empty; run the fetch + store steps above to
+rebuild, or treat the demo video as the reference for the full flow.
 
 ## Evaluation
 
@@ -97,7 +116,8 @@ Full numbers, seeds and caveats: `docs/verification/eval-results.md` (test set
 - Refusal: precision **0.60**, recall **0.55** (unrelated 1.0, near-miss 0.2,
   false-premise 0.67).
 - Citation accuracy: **15/22** overall, **15/16** on answered items; label
-  accuracy **8/10** hand-checked.
+  accuracy **8/10** hand-checked; chat latency mean **≈33 s** per item
+  (min 12.3 s, max 57.4 s).
 - RAGAS-style custom judge (not the RAGAS library): faithfulness **0.75**,
   answer relevancy **0.93**, context precision **0.32**, context recall **0.53**.
 - Simulated-student ablation (30 students × 5 profiles × 3 policies): under the
