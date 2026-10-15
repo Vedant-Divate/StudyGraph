@@ -51,6 +51,7 @@ def _clean_db(
     global _test_engine
     _test_engine = local_postgres_engine
     monkeypatch.setenv("DATA_DIR", str(tmp_path_factory.mktemp("data")))
+    monkeypatch.setenv("LLM_CACHE_DIR", str(tmp_path_factory.mktemp("cache")))
     with Session(local_postgres_engine) as sess:
         for table in ("content_units", "sources", "courses", "jobs"):
             sess.execute(text(f"DELETE FROM {table}"))

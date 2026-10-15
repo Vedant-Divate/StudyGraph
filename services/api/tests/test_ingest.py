@@ -32,6 +32,7 @@ def test_chunking_stays_within_page() -> None:
 
 def test_ingest_units_have_exactly_one_location(tmp_path: Path) -> None:
     settings = get_settings()
+    settings.llm_cache_dir = str(tmp_path / "cache")  # isolate from other tests
     units, quality = pdf_ingestion.ingest_pdf(
         source_id=uuid.uuid4(),
         pdf_path=FIXTURE,
